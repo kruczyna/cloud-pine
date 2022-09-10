@@ -114,7 +114,7 @@ tap.test('CloudLogging#sync', root => {
     )
 
     nested.test(
-      'Calles made to #resource should return the fresh object of the parent resource',
+      'Calls made to #resource should return the fresh object of the parent resource',
       async t => {
         const logName = 'test'
         const projectId = 'test-project'
@@ -255,7 +255,7 @@ tap.test('CloudLogging#sync', root => {
       sync: true
     }
 
-    nested.plan(6)
+    nested.plan(7)
 
     nested.test('Should parse a line correctly', async t => {
       let expectedEntry
@@ -719,6 +719,88 @@ tap.test('CloudLogging#sync', root => {
         instance.parseLine('{{}')
       }
     )
+
+    nested.test(
+      'Should forward the parsed logs into stdout correctly',
+      /*
+        const entry = log.entry('gce_instance', {
+          instance: 'my_instance'
+         });
+        log.write(entry); -> happens in parseLine
+       */
+      async t => {
+        let expectedEntry
+        const logEntry = {
+          level: 50,
+          some: 'log',
+          being: 'printed',
+          msg: 'being printed'
+        }
+
+        class LogMock extends BaseLogMock {
+          entry (meta, log) {
+            const expectedMeta = Object.assign(
+              {
+                severity: CloudLogging.SEVERITY_MAP[50],
+                labels: {
+                  logger: 'pino',
+                  agent: 'cloud_pine'
+                }
+              },
+              { resource: Object.assign({ type: 'global' }, detectedResource) }
+            )
+            const expectedLogEntry = Object.assign({ message: '' }, logEntry)
+
+            expectedLogEntry.message = logEntry.msg
+            delete expectedLogEntry.msg
+
+            t.same(meta, expectedMeta)
+            t.same(log, expectedLogEntry)
+            console.log('test.test', expectedLogEntry)
+            // t.same(expectedLogEntry, 'Some custom message')
+
+            return (
+              (expectedEntry = Object.assign({}, meta, {
+                jsonPayload: log,
+                logName: this.name
+              })),
+              expectedEntry
+            )
+          }
+
+          write (entry) {
+            t.same(entry, expectedEntry)
+          }
+        }
+
+        class LoggingMock extends BaseLoggingMock {
+          setProjectId () {
+            return Promise.resolve()
+          }
+
+          setDetectedResource () {
+            this.detectedResource = detectedResource
+            return Promise.resolve()
+          }
+
+          logSync (name) {
+            return new LogMock(name)
+          }
+        }
+
+        const { CloudLogging } = t.mock('../../lib/cloud-logging', {
+          '@google-cloud/logging': { Logging: LoggingMock }
+        })
+
+        t.plan(3)
+
+        const instance = new CloudLogging(logName, defaultOptions)
+
+        await instance.init()
+
+        instance.parseLine(JSON.stringify(logEntry)) // this._log.write(this._log.entry(meta, log)) happens inside parseLine
+      }
+    )
   })
 })
 
@@ -798,7 +880,7 @@ tap.test('CloudLogging#async', root => {
     )
 
     nested.test(
-      'Calles made to #resource should return the fresh object of the parent resource',
+      'Calls made to #resource should return the fresh object of the parent resource',
       async t => {
         const logName = 'test'
         const projectId = 'test-project'
